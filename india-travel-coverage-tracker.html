@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>India Travel Coverage Tracker</title>
+<meta name="description" content="Track the Indian states and union territories you have visited.">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<style>
+  :root{
+    --bg:#f5f7f6; --card:#ffffff; --ink:#18211c; --muted:#68736c;
+    --line:#dfe5e1; --green:#16a36a; --green-dark:#087b4d;
+    --green-soft:#dff6ea; --grey:#d7ddd9; --grey-hover:#c8d0ca;
+    --shadow:0 12px 35px rgba(24,33,28,.08);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  .wrap{max-width:1250px;margin:0 auto;padding:28px 22px 42px}
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:20px}
+  h1{font-size:clamp(27px,4vw,42px);line-height:1.05;margin:0 0 8px;letter-spacing:-.04em}
+  .sub{color:var(--muted);margin:0;font-size:15px}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+  button{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:11px;padding:10px 13px;font-weight:650;cursor:pointer}
+  button:hover{background:#f0f3f1}
+  button.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}
+  .map-card{min-height:690px;position:relative;overflow:hidden}
+  .map-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line)}
+  .map-head strong{font-size:14px}
+  .legend{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:12px}
+  .dot{width:11px;height:11px;border-radius:3px;display:inline-block;margin-right:5px;vertical-align:-1px}
+  #map{width:100%;height:625px;display:block}
+  .state{fill:var(--grey);stroke:#fff;stroke-width:1.2;stroke-linejoin:round;stroke-linecap:round;cursor:pointer;transition:fill .18s,stroke .18s,opacity .18s}
+  .state:hover{fill:var(--grey-hover);stroke:#657069;stroke-width:1.8}
+  .state.visited{fill:var(--green) !important;stroke:#fff}
+  .state.visited:hover{fill:var(--green-dark) !important}
+  .side{display:flex;flex-direction:column;gap:14px}
+  .progress-card{padding:20px}
+  .eyebrow{font-size:12px;font-weight:750;color:var(--muted);text-transform:uppercase;letter-spacing:.09em}
+  .count{font-size:48px;line-height:1;margin:8px 0 4px;font-weight:800;letter-spacing:-.05em}
+  .count span{font-size:18px;color:var(--muted);font-weight:650}
+  .bar{height:10px;background:#edf1ee;border-radius:999px;overflow:hidden;margin:16px 0 8px}
+  .bar>div{height:100%;background:var(--green);border-radius:999px;width:0;transition:width .3s}
+  .percent{font-size:13px;color:var(--muted)}
+  .controls{padding:15px}
+  .search{width:100%;border:1px solid var(--line);border-radius:11px;padding:11px 12px;font-size:14px;outline:none}
+  .search:focus{border-color:#91b8a5;box-shadow:0 0 0 3px rgba(22,163,106,.10)}
+  .tabs{display:flex;background:#f0f3f1;border-radius:11px;padding:3px;margin-top:10px}
+  .tabs button{border:0;background:transparent;padding:8px 10px;border-radius:8px;flex:1;font-size:12px}
+  .tabs button.active{background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+  .list-card{padding:16px;min-height:270px}
+  .list-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .list-head strong{font-size:14px}
+  .list{display:flex;flex-wrap:wrap;gap:7px;max-height:400px;overflow:auto;padding-right:2px}
+  .chip{font-size:12px;border:1px solid var(--line);background:#f8faf9;padding:7px 9px;border-radius:999px;cursor:pointer}
+  .chip:hover{border-color:#9bb8aa}
+  .chip.done{background:var(--green-soft);border-color:#bce8d2;color:#087b4d}
+  .empty{color:var(--muted);font-size:13px;padding:8px 0}
+  .tip{position:fixed;z-index:10;pointer-events:none;background:#152019;color:#fff;border-radius:9px;padding:8px 10px;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);opacity:0;transform:translateY(4px);transition:opacity .1s,transform .1s}
+  .tip.show{opacity:1;transform:translateY(0)}
+  .loading{position:absolute;inset:58px 0 0;display:grid;place-items:center;background:rgba(255,255,255,.8);backdrop-filter:blur(2px);z-index:2}
+  .loader{text-align:center;color:var(--muted);font-size:13px}
+  .spinner{width:28px;height:28px;border:3px solid #dce5df;border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .note{padding:0 18px 14px;color:#7a847e;font-size:11px}
+  @media(max-width:900px){
+    .grid{grid-template-columns:1fr}
+    .map-card{min-height:560px}
+    #map{height:500px}
+    header{align-items:flex-start;flex-direction:column}
+  }
+  @media(max-width:560px){
+    .wrap{padding:18px 12px 28px}
+    .map-head{align-items:flex-start;gap:10px;flex-direction:column}
+    #map{height:430px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>India Travel Coverage</h1>
+      <p class="sub">Click a state or Union Territory when you’ve visited it. Your progress is saved automatically on this device.</p>
+    </div>
+    <div class="actions">
+      <button id="markAll">Mark all</button>
+      <button id="reset">Reset</button>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="card map-card">
+      <div class="map-head">
+        <strong>Tap a region to mark it visited</strong>
+        <div class="legend">
+          <span><i class="dot" style="background:#d7ddd9"></i>Not visited</span>
+          <span><i class="dot" style="background:#16a36a"></i>Visited</span>
+        </div>
+      </div>
+      <div class="loading" id="loading"><div class="loader"><div class="spinner"></div>Loading India map…</div></div>
+      <svg id="map" viewBox="0 0 900 680" role="img" aria-label="Interactive map of India"></svg>
+      <div class="note">Boundary data loaded locally from ./geoJson/ folder.</div>
+    </section>
+
+    <aside class="side">
+      <section class="card progress-card">
+        <div class="eyebrow">Coverage</div>
+        <div class="count"><b id="visitedCount">0</b> <span>/ <span id="totalCount">36</span></span></div>
+        <div class="bar"><div id="barFill"></div></div>
+        <div class="percent" id="percent">0% of states & UTs covered</div>
+      </section>
+
+      <section class="card controls">
+        <input id="search" class="search" type="search" placeholder="Search a state…" autocomplete="off">
+        <div class="tabs">
+          <button class="active" data-filter="all">All</button>
+          <button data-filter="states">States</button>
+          <button data-filter="uts">UTs</button>
+        </div>
+      </section>
+
+      <section class="card list-card">
+        <div class="list-head">
+          <strong id="listTitle">States & UTs</strong>
+          <span class="eyebrow" id="leftCount">36 left</span>
+        </div>
+        <div id="list" class="list"></div>
+      </section>
+    </aside>
+  </main>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+const states = [
+  ["Andhra Pradesh","state","andhra-pradesh"],["Arunachal Pradesh","state","arunachal-pradesh"],
+  ["Assam","state","assam"],["Bihar","state","bihar"],["Chhattisgarh","state","chhattisgarh"],
+  ["Goa","state","goa"],["Gujarat","state","gujarat"],["Haryana","state","haryana"],
+  ["Himachal Pradesh","state","himachal-pradesh"],["Jharkhand","state","jharkhand"],
+  ["Karnataka","state","karnataka"],["Kerala","state","kerala"],["Madhya Pradesh","state","madhya-pradesh"],
+  ["Maharashtra","state","maharashtra"],["Manipur","state","manipur"],["Meghalaya","state","meghalaya"],
+  ["Mizoram","state","mizoram"],["Nagaland","state","nagaland"],["Odisha","state","odisha"],
+  ["Punjab","state","punjab"],["Rajasthan","state","rajasthan"],["Sikkim","state","sikkim"],
+  ["Tamil Nadu","state","tamil-nadu"],["Telangana","state","telangana"],["Tripura","state","tripura"],
+  ["Uttarakhand","state","uttarakhand"],["Uttar Pradesh","state","uttar-pradesh"],["West Bengal","state","west-bengal"],
+  ["Andaman and Nicobar Islands","ut","andaman-and-nicobar-islands"],["Chandigarh","ut","chandigarh"],
+  ["Dadra & Nagar Haveli and Daman & Diu","ut","dadra-and-nagar-haveli-and-daman-and-diu"],
+  ["Delhi","ut","delhi"],["Jammu and Kashmir","ut","jammu-and-kashmir"],["Ladakh","ut","ladakh"],
+  ["Lakshadweep","ut","lakshadweep"],["Puducherry","ut","puducherry"]
+];
+
+const GEO_BASE = "./geoJson/";
+const KEY = "india-travel-coverage-v1";
+let visited = new Set(JSON.parse(localStorage.getItem(KEY) || "[]"));
+let activeFilter = "all";
+let validResults = [];
+const svg = d3.select("#map");
+const tip = document.getElementById("tip");
+
+function save(){ localStorage.setItem(KEY, JSON.stringify([...visited])); }
+
+function updateUI(){
+  const filtered = states.filter(s => activeFilter==="all" || (activeFilter==="states" ? s[1]==="state" : s[1]==="ut"));
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  const visible = filtered.filter(s => s[0].toLowerCase().includes(q));
+  
+  document.getElementById("visitedCount").textContent = visited.size;
+  document.getElementById("totalCount").textContent = states.length;
+  const pct = Math.round(visited.size / states.length * 100);
+  document.getElementById("barFill").style.width = pct + "%";
+  document.getElementById("percent").textContent = `${pct}% of states & UTs covered`;
+  document.getElementById("listTitle").textContent = activeFilter==="states" ? "States" : activeFilter==="uts" ? "Union Territories" : "States & UTs";
+  const remaining = states.filter(s=>!visited.has(s[0])).length;
+  document.getElementById("leftCount").textContent = `${remaining} left`;
+
+  // Update path classes on SVG directly matching state names
+  svg.selectAll(".state").classed("visited", d => visited.has(d.name));
+
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+  visible.forEach(s => {
+    const b = document.createElement("button");
+    b.className = "chip" + (visited.has(s[0]) ? " done" : "");
+    b.textContent = (visited.has(s[0]) ? "✓ " : "") + s[0];
+    b.onclick = () => toggle(s[0]);
+    list.appendChild(b);
+  });
+  if(!visible.length) list.innerHTML = '<div class="empty">No matching region.</div>';
+}
+
+function toggle(name){
+  if(visited.has(name)) visited.delete(name); else visited.add(name);
+  save(); updateUI();
+}
+
+function showTip(e,name){
+  tip.textContent = name;
+  tip.style.left = (e.clientX + 12) + "px";
+  tip.style.top = (e.clientY + 12) + "px";
+  tip.classList.add("show");
+}
+function hideTip(){ tip.classList.remove("show"); }
+
+async function loadMap(){
+  try{
+    const results = await Promise.all(states.map(async ([name, type, slug]) => {
+      try {
+        const r = await fetch(GEO_BASE + slug + ".geojson");
+        if(!r.ok) return null;
+        const g = await r.json();
+        
+        let geometries = [];
+        if (g.type === "FeatureCollection") {
+          geometries = g.features.map(f => f.geometry).filter(Boolean);
+        } else if (g.type === "Feature") {
+          geometries = [g.geometry];
+        } else if (g.geometry) {
+          geometries = [g.geometry];
+        }
+
+        // Merge all inner district geometries into a single GeometryCollection per state
+        const mergedFeature = {
+          type: "Feature",
+          properties: { st_nm: name },
+          geometry: {
+            type: "GeometryCollection",
+            geometries: geometries
+          }
+        };
+
+        return { name, type, feature: mergedFeature };
+      } catch(e) {
+        console.warn(`Failed loading: ${name}`, e);
+        return null;
+      }
+    }));
+
+    validResults = results.filter(Boolean);
+
+    // Center projection over India
+    const projection = d3.geoMercator()
+      .center([80.5, 22.0])
+      .scale(1100)
+      .translate([900 / 2, 680 / 2]);
+
+    const path = d3.geoPath(projection);
+
+    svg.selectAll("path")
+      .data(validResults)
+      .join("path")
+      .attr("class", d => "state" + (visited.has(d.name) ? " visited" : ""))
+      .attr("d", d => path(d.feature))
+      .attr("tabindex", 0)
+      .attr("aria-label", d => d.name)
+      .on("click", (e, d) => toggle(d.name))
+      .on("mousemove", (e, d) => showTip(e, d.name))
+      .on("mouseleave", hideTip)
+      .on("focus", (e, d) => { 
+        tip.textContent = d.name; 
+        tip.style.left = (e.clientX + 12) + "px"; 
+        tip.style.top = (e.clientY + 12) + "px"; 
+        tip.classList.add("show"); 
+      })
+      .on("blur", hideTip);
+
+    document.getElementById("loading").style.display = "none";
+    updateUI();
+  } catch(err) {
+    document.getElementById("loading").innerHTML = '<div class="loader">Could not load local map files.<br><br>Check browser console (F12) for details.</div>';
+    console.error(err);
+  }
+}
+
+document.getElementById("search").addEventListener("input", updateUI);
+document.querySelectorAll(".tabs button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tabs button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active"); activeFilter = btn.dataset.filter; updateUI();
+  });
+});
+document.getElementById("reset").onclick = () => {
+  if(confirm("Reset all travel progress?")){ visited.clear(); save(); updateUI(); }
+};
+document.getElementById("markAll").onclick = () => {
+  states.forEach(s => visited.add(s[0])); save(); updateUI();
+};
+
+loadMap();
+</script>
+</body>
+</html>
